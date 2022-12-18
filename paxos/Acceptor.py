@@ -83,8 +83,21 @@ class Acceptor(Agent):
             #print message
             print(f"Acceptor [{self.pid}] sending [{message2B}] to proposers")
 
+    #Responds to instance catchup request from undetermined agent
     def __handleCatchupInstanceRequest(self, message):
+        #create phase 2B message
+        messageCU = msg.Message(instance=self.instance, phase="CU_INST_UP")
 
+        #get address of acceptors and send mesage
+        role = message.data['role']
+        address = (
+            self.network[role]['ip'], 
+            self.network[role]['port']
+        )
+        self.send(address, messageCU.encode())
+
+        #print message
+        print(f"Acceptor [{self.pid}] sending [{messageCU}] to {role}")
 
     '''
         PUBLIC
@@ -107,6 +120,6 @@ class Acceptor(Agent):
         elif message.phase == "2A":
             #If the leader sends a proposal
             self.__phase2B(message)
-        elif message.phase == "CU_INST":
+        elif message.phase == "CU_INST_REQ":
             #If a proposer or learner wants an instance update
             self.__handleCatchupInstanceRequest(message)

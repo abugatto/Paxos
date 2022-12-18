@@ -2,7 +2,7 @@ import sys
 import time
 import math
 
-import Message 
+import Message as msg
 import Agent
 
 
@@ -33,21 +33,87 @@ class Learner(Agent):
         if instance not in self.states:
             self.states[instance] = {'v': None}
 
-
+    #request current instance from acceptors
     def __catchupInstanceRequest(self):
+        #create phase 2B message
+        messageCU = msg.Message(phase="CU_INST_REQ", data = {'role': "learners"})
 
+        #get address of acceptors and send mesage
+        address = (
+            self.network['acceptors']['ip'], 
+            self.network['acceptors']['port']
+        )
+        self.send(address, messageCU.encode())
 
+        #print message
+        print(f"Learner [{self.pid}] sending [{messageCU}] to acceptors")
 
+    #Check and update history if needed
     def __catchupHistoryRequest(self):
+        #Checks if any instances are missing from the history
+        for instance in range(0, self.instance + 1):
+            if instance != -1 and instance not in self.states:
+                self.printable = False
+                break
+        
+        #If not printable request history from proposers
+        if self.printable:
+            for instance in range(self.lastInstance + 1, len(self.states)):
+                v = self.states[instance]['v']
+                if instance in self.states and v is not None:
+                    print(f'Instance [{instance}]: {v}')
+            
+            #update lastInstance
+            self.lastInstance = len(self.states)-1
+        else:
+            #create phase 2B message
+            messageCU = msg.Message(phase="CU_HIST_REQ")
 
+            #get address of proposers and send mesage
+            address = (
+                self.network['proposers']['ip'], 
+                self.network['proposers']['port']
+            )
+            self.send(address, messageCU.encode())
 
+            #print message
+            print(f"Learner [{self.pid}] sending [{messageCU}] to proposers")
 
+    #Updates instance from acceptor CU_INST_UP message
     def __handleCatchupInstanceUpdate(self, message):
+        #if instance is greater than sent instance update
+        if self.instance < message.instance:
+            #update instance
+            self.instance = message.instance
 
+            #If learner just spawned request history
+            if self.instance == -1:
+                self.__catchupHistoryRequest()
 
-
+    #Updates History from leader
     def __handleCatchupHistoryUpdate(self, message):
+        history = message['history']
 
+        #if history not empty 
+        if history is not None:
+            #if new instance is included then update
+            newinstance =len(history) - 1
+            if self.instance < newinstance:
+                self.instance = newinstance
+
+            #Add all new instances from history to states
+            for instance in history:
+                if instance not in self.states or self.states[instance]['v'] is None:
+                    self.states[instance] = {'v': history[instance]}
+
+        #Print
+        for instance in range(self.lastInstance + 1, len(self.states)):
+            v = self.states[instance]['v']
+            if instance in self.states and v is not None:
+                print(f'Instance [{instance}]: {v}')
+            
+        #update lastInstance
+        self.lastInstance = len(self.states)-1
 
     '''
         PUBLIC
@@ -87,10 +153,10 @@ class Learner(Agent):
 
             #Check and update history if needed
             self.__catchupHistoryRequest()
-        elif message.phase == "CU_INST":
+        elif message.phase == "CU_INST_UP":
             #if acceptors return for instance update
             #request missing instances from proposers if needed
             self.__handleCatchupInstanceUpdate(message)
-        elif message.phase == "CU_HISTORY":
+        elif message.phase == "CU_HISTORY_UP":
             #If the leader sends the history
             self.__handleCatchupHistoryUpdate(message)

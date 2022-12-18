@@ -226,18 +226,34 @@ class Proposer(Agent):
             #print message
             print(f"Proposer [{self.pid}] sending [{message}] to proposers and learners")
 
-
+    #Requests instance from acceptor
     def __catchupInstanceRequest(self):
+        #create phase 2B message
+        messageCU = msg.Message(phase="CU_INST_REQ", data = {'role': "proposers"})
 
+        #get address of acceptors and send mesage
+        address = (
+            self.network['acceptors']['ip'], 
+            self.network['acceptors']['port']
+        )
+        self.send(address, messageCU.encode())
 
+        #print message
+        print(f"Proposer [{self.pid}] sending [{messageCU}] to acceptors")
+
+    #
     def __catchupDecisionRequest(self, instance):
-
+        #Checks if any instances are missing from the history
+        for instance in range(0, self.instance + 1):
+            if instance != -1 and instance not in self.states:
+                
 
     def __catchupHistoryRequest(self):
 
 
+    #Handles instance update from acceptors
     def __handleCatchupInstanceUpdate(self, message):
-
+        #
 
     def __handleCatchupHistoryUpdate(self):
 
@@ -322,10 +338,10 @@ class Proposer(Agent):
             if message.data['pid'] > self.pid:
                 self.leader = False
                 self.daemon.updateLeader(self.leader)
-        elif message.phase == "CU_INST":
-            #If acceptor requests catchup
+        elif message.phase == "CU_INST_UP":
+            #If acceptor sends an instance update
             self.__handleCatchupInstanceUpdate(message.instance)
-        elif message.phase == "CU_HISTORY":
+        elif message.phase == "CU_HISTORY_REQ":
             #If learner requests states history from leader
             if self.leader:
-                self.__handleCatchupHistoryUpdate()
+                self.__handleCatchupHistoryRequest()

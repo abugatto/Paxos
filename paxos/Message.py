@@ -53,17 +53,18 @@ class Message:
                 self.data = {
                     "pid": data['pid']
                 }
-            elif self.phase == "CU_INST":
+            elif self.phase == "CU_INST_Req":
                 self.data = {
-                    "instance": data['instance'],
-                    "role": data['role']
+                    "role": data['role'] #multiple agents will use this
                 }
-            elif self.phase == "CU_HISTORY":
-                self.data = data['decisions']
-            elif self.phase == "UPDATE":
-                self.data = {
-                    "c_rnd": data['c_rnd']
-                }
+            elif self.phase == "CU_INST_UP":
+                #Update instance
+                self.data = None
+            elif self.phase == "CU_HISTORY_REQ":
+                #No data, just a request
+                self.data = None
+            elif self.phase == "CU_HISTORY_UP":
+                self.data = data['history']
             else:
                 print("Error!!! Invalid message type...")
         else:
