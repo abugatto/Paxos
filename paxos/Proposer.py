@@ -64,7 +64,7 @@ class LeaderElectionDaemon(Thread):
                     self.catchup()
 
     #Updates leader
-    def updateLeader(leader):
+    def updateLeader(self, leader):
         self.leader = leader
 
     #Updates leader timer
@@ -91,6 +91,7 @@ class Proposer(Agent):
 
         #for quorum calculation
         self.quorum = math.ceil((acceptors + 1) / 2)
+        self.proposersCaughtUp = 0 #another way to track quorum
 
         #keep track of instance and whether it is updated
         self.instance = -1
@@ -175,7 +176,7 @@ class Proposer(Agent):
             #create phase 2A message
             instance = message.instance
             message2A = msg.Message(instance=instance, phase="2A", data = {
-                'c_rnd': self.states[instance]['c_rnd']
+                'c_rnd': self.states[instance]['c_rnd'],
                 'c_val': self.states[instance]['c_val']
             })
 
@@ -205,7 +206,7 @@ class Proposer(Agent):
             #create phase DECISION message
             instance = message.instance
             encoded = msg.Message(instance=instance, phase="DECISION", data = {
-                'c_rnd': self.states[instance]['c_rnd']
+                'c_rnd': self.states[instance]['c_rnd'],
                 'c_val': self.states[instance]['c_val']
             }).encode()
 
@@ -228,7 +229,7 @@ class Proposer(Agent):
 
     #Requests instance from acceptor
     def __catchupInstanceRequest(self):
-        #create phase 2B message
+        #create phase CU_INST_REQ message
         messageCU = msg.Message(phase="CU_INST_REQ", data = {'role': "proposers"})
 
         #get address of acceptors and send mesage
@@ -241,23 +242,59 @@ class Proposer(Agent):
         #print message
         print(f"Proposer [{self.pid}] sending [{messageCU}] to acceptors")
 
-    #
-    def __catchupDecisionRequest(self, instance):
-        #Checks if any instances are missing from the history
-        for instance in range(0, self.instance + 1):
-            if instance != -1 and instance not in self.states:
-                
-
-    def __catchupHistoryRequest(self):
-
-
     #Handles instance update from acceptors
     def __handleCatchupInstanceUpdate(self, message):
-        #
+        #Update instance if needed
+        if self.instance < message.instance:
+            self.instance = message.instance
+        
+        #If a majority of nodes have caught up then we have reached quorum
+        if not self.isUpdated:
+            self.proposersCaughtUp += 1
+            if self.proposersCaughtUp == self.quorum:
+                self.proposersCaughtUp = 0
+                self.isUpdated = True
+        
+        #Checks if any instances are missing from the history and requests them
+        for instance in range(0, self.instance + 1):
+            if instance != -1 and instance not in self.states:
+                #create phase REQUEST message
+                messageReq = msg.Message(instance=instance, phase="REQUEST", data=None)
 
-    def __handleCatchupHistoryUpdate(self):
+                #get address of proposers and send mesage
+                address = (
+                    self.network['proposers']['ip'], 
+                    self.network['proposers']['port']
+                )
+                self.send(address, messageReq.encode())
 
+                #print message
+                print(f"Proposer [{self.pid}] sending [{messageReq}] to proposers")
+            
 
+    #Handle history request from learner
+    def __handleCatchupHistoryRequest(self):
+        #If valued instance is in states then add value to history
+        history = {}
+        for instance in self.states:
+            if self.states[instance]['c_val'] is not None:
+                history[instance] = self.states[instance]['c_val']
+            else:
+                history[instance] = None
+
+        #Make history message to send to learners
+        if len(history) == 0: history = None
+        messageCU = msg.Message(phase="CU_HIST_UP", data = {'history': history})
+
+        #get address of learners and send mesage
+        address = (
+            self.network['learners']['ip'], 
+            self.network['learners']['port']
+        )
+        self.send(address, messageCU.encode())
+
+        #print message
+        print(f"Proposer [{self.pid}] sending [{messageCU}] to learners")
 
     '''
         PUBLIC

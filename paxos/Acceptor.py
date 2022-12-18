@@ -85,7 +85,7 @@ class Acceptor(Agent):
 
     #Responds to instance catchup request from undetermined agent
     def __handleCatchupInstanceRequest(self, message):
-        #create phase 2B message
+        #create phase CU_INST_UP message
         messageCU = msg.Message(instance=self.instance, phase="CU_INST_UP")
 
         #get address of acceptors and send mesage
