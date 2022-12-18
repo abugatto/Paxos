@@ -1,89 +1,73 @@
 #!/usr/bin/env python3
 import sys
-import socket
-import struct
 
-def mcast_receiver(hostport):
-    """create a multicast socket listening to the address"""
-    recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    recv_sock.bind(hostport)
+import Client
+import Proposer
+import Acceptor
+import Learner
 
-    mcast_group = struct.pack("4sl", socket.inet_aton(hostport[0]), socket.INADDR_ANY)
-    recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mcast_group)
-    return recv_sock
+#########################################
 
-
-def mcast_sender():
-    """create a udp socket"""
-    send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    return send_sock
-
-
-def parse_cfg(cfgpath):
-    cfg = {}
+#Parses configuration file and returns network dictionary
+def get_network(cfgpath):
+    network = {}
     with open(cfgpath, 'r') as cfgfile:
         for line in cfgfile:
             (role, host, port) = line.split()
-            cfg[role] = (host, int(port))
-    return cfg
+            network[role] = {'ip': host, 'port': int(port)}
 
-# ----------------------------------------------------
+    return network
 
-def acceptor(config, id):
-    print ('-> acceptor', id)
-    state = {}
-    r = mcast_receiver(config['acceptors'])
-    s = mcast_sender()
-    while True:
-        msg = r.recv(2**16)
-        # fake acceptor! just forwards messages to the learner
-        if id == 1:
-            # print "acceptor: sending %s to learners" % (msg)
-            s.sendto(msg, config['learners'])
-
-
-def proposer(config, id):
-    print ('-> proposer', id)
-    r = mcast_receiver(config['proposers'])
-    s = mcast_sender()
-    while True:
-        msg = r.recv(2**16)
-        # fake proposer! just forwards message to the acceptor
-        if id == 1:
-            # print "proposer: sending %s to acceptors" % (msg)
-            s.sendto(msg, config['acceptors'])
-
-
-def learner(config, id):
-    r = mcast_receiver(config['learners'])
-    while True:
-        msg = r.recv(2**16)
-        print(msg)
-        sys.stdout.flush()
-
-
-def client(config, id):
-    print ('-> client ', id)
-    s = mcast_sender()
-    for value in sys.stdin:
-        value = value.strip()
-        print ("client: sending %s to proposers" % (value))
-        s.sendto(value.encode(), config['proposers'])
-    print ('client done.')
-
+#########################################
 
 if __name__ == '__main__':
-        cfgpath = sys.argv[1]
-        config = parse_cfg(cfgpath)
-        role = sys.argv[2]
-        id = int(sys.argv[3])
-        if role == 'acceptor':
-            rolefunc = acceptor
-        elif role == 'proposer':
-            rolefunc = proposer
-        elif role == 'learner':
-            rolefunc = learner
-        elif role == 'client':
-            rolefunc = client
-        rolefunc(config, id)
+    #parse command line arguments
+    cfgpath = sys.argv[1]
+    role = sys.argv[2]
+    id = int(sys.argv[3])
+
+    #create network address dictionary
+    network = get_network(cfgpath)
+    max_acceptors = 3
+
+    #Start process for requested node
+    print(f'Initializing agent: [{role} : {id}]')
+    if role == 'acceptor':
+        acceptors = network['acceptors']
+        acceptor = Acceptor.Acceptor(
+            role=role,
+            address=(id, acceptors['ip'], acceptors['port']),
+            network=network,
+            max_acceptors=max_acceptors
+        )
+        
+        acceptor.start() #spawns seperate process and kills current
+    elif role == 'proposer':
+        proposers = network['proposers']
+        proposer = Proposer.Proposer(
+            role=role,
+            address=(id, proposers['ip'], proposers['port']),
+            network=network
+            max_acceptors=max_acceptors
+        )
+
+        proposer.start()
+    elif role == 'learner':
+        learners = network['learners']
+        learner = Learner.Learner(
+            role=role,
+            address=(id, learners['ip'], learners['port']),
+            network=network
+        )
+
+        learner.start()
+    elif role == 'client':
+        clients = network['clients']
+        client = Client.Client(
+            role=role,
+            address=(id, clients['ip'], clients['port']),
+            network=network
+        )
+
+        #runs in current process (with commandline input)
+        client.run()
